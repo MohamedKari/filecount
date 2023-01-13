@@ -4,26 +4,13 @@ from pathlib import Path
 from argparse import ArgumentParser
 from typing import Iterable
 
-def count_files(path_to_dir: Path | str):
-    path_to_dir = Path(path_to_dir)
-    flat: Iterable[Path] = path_to_dir.glob("**/*")
-    
-    # print(list(str(f) for f in flat))
+def gather_counts_per_directory(root_dir: Path | str) -> dict[Path, int]:
+    root_dir = Path(root_dir)
+    assert root_dir.is_dir()
 
-    direct_child_files: Iterable[Path] = []
-    direct_child_directory: Iterable[Path] = []
+    flat: Iterable[Path] = root_dir.glob("**/*")
     counts_per_directory: dict[str, int] = {}
-    
-    print("Expanding tree...")
     for p in reversed(list(flat)):
-        if p.is_file() and p.parent == path_to_dir:
-            direct_child_files.append(p)
-            continue
-        
-        if p.is_dir() and p.parent == path_to_dir:
-            direct_child_directory.append(p)
-            continue
-
         if p.is_dir():
             continue
 
@@ -33,19 +20,29 @@ def count_files(path_to_dir: Path | str):
                 counts_per_directory[k] = counts_per_directory[k] + 1
             else:
                 counts_per_directory[k] = 1
-    
-    print("Aggregating in dict...")
+
+    return counts_per_directory
+
+def get_breatkdown_at_directory(breakdown_dir: Path | str):
+    breakdown_dir = Path(breakdown_dir)
+
+    direct_children = list(breakdown_dir.glob("*"))
+    direct_child_dirs = [child for child in direct_children if child.is_dir()]
+    direct_child_files = [child for child in direct_children if child.is_file()]
+
+    counts_per_directory = gather_counts_per_directory(breakdown_dir)
+
+    # aggregate
     counts_per_child_dir: dict[str, int] = {
         str(d): counts_per_directory[str(d)] 
                 if str(d) in counts_per_directory
                 else 0
-        for d in direct_child_directory
+        for d in direct_child_dirs
     }
-
-    print("Printing...")
+    
     counts_per_child_dir = dict(sorted(counts_per_child_dir.items(), key=lambda item: item[1], reverse=True))
 
-    print(f"{path_to_dir}:")
+    print(f"{breakdown_dir}:")
     for d_name, d_count in counts_per_child_dir.items():
         print(f"{d_count: 8}  {d_name}")
     
@@ -53,5 +50,6 @@ def count_files(path_to_dir: Path | str):
     f_name = "direct child files"
     print(f"{f_count: 6}  {f_name}")
 
+
 if __name__ == "__main__":
-    count_files(sys.argv[-1])
+    get_breatkdown_at_directory(" ".join(sys.argv[1:]))
