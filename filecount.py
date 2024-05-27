@@ -1,8 +1,8 @@
-import sys
-import pprint
 from pathlib import Path
-from argparse import ArgumentParser
-from typing import Iterable
+import argparse
+from typing import Iterable, Optional
+import hashlib
+import json 
 
 class Breakddown:
     def __init__(self, 
@@ -31,9 +31,9 @@ class Breakddown:
 
         # aggregate
         counts_per_child_dir: dict[str, int] = {
-            str(d): counts_per_directory[str(d)] 
-                    if str(d) in counts_per_directory
-                    else 0
+            str(d.absolute()): counts_per_directory[str(d.absolute())] 
+                               if str(d.absolute()) in counts_per_directory
+                               else 0
             for d in direct_child_dirs
         }
         
@@ -46,6 +46,7 @@ class Breakddown:
         
 
 def gather_counts_per_directory(root_dir: Path | str) -> dict[Path, int]:
+    print("Gathering counts per directory...")
     root_dir = Path(root_dir)
     assert root_dir.is_dir()
 
@@ -64,8 +65,43 @@ def gather_counts_per_directory(root_dir: Path | str) -> dict[Path, int]:
 
     return counts_per_directory
 
+def str2hash(hashable: str) -> str:
+    return hashlib.md5(hashable.encode("utf8")).hexdigest()
+
+def get_potential_cache_path(breakdown_dir: Path) -> Path:
+    paths = [breakdown_dir] + list(breakdown_dir.parents)
+
+    for p in paths:
+        hash = str2hash(str(p.absolute()))
+        potential_hash_file = Path(f"{hash}.json")
+        if potential_hash_file.exists():
+            print(f"Found cache with hash {hash} for {p}")
+            return potential_hash_file
+    
+    return Path(f"{str2hash(str(breakdown_dir.absolute()))}.json")
 
 if __name__ == "__main__":
-    breakdown_dir = " ".join(sys.argv[1:])
-    counts_per_directory = gather_counts_per_directory(breakdown_dir)
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--use-cache", action="store_true")
+    parser.add_argument("path", type=str, nargs=argparse.REMAINDER)
+    args = parser.parse_args()
+
+    breakdown_dir = Path(" ".join(args.path))
+    assert breakdown_dir.is_dir()
+
+    if args.use_cache:
+        cache_file = get_potential_cache_path(breakdown_dir)
+        
+        if cache_file.exists():
+            print(f"Loading cache at {cache_file}...")
+            with cache_file.open("rt", encoding="utf8") as f:
+                counts_per_directory = json.load(f,)
+                # print(counts_per_directory)
+        else:
+            counts_per_directory = gather_counts_per_directory(breakdown_dir)
+            with cache_file.open("wt", encoding="utf8") as f:
+                print(f"writing cache for {breakdown_dir} to {cache_file}")
+                json.dump(counts_per_directory, f, indent=1, ensure_ascii=False)
+    
     Breakddown.compute_at_directory(breakdown_dir, counts_per_directory).to_stdout()
